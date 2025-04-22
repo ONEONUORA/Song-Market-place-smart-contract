@@ -1,7 +1,7 @@
 use starknet::ContractAddress;
 use super::interface::ISongMarketplace;
 
-#[derive(Clone, Debug, Drop, PartialEq, Serde, starknet::Store)]
+#[derive(Clone, Copy, Debug, Drop, PartialEq, Serde, starknet::Store)]
 pub struct Song {
     name: felt252,
     ipfs_hash: felt252,
@@ -100,12 +100,47 @@ mod SongMarketplace {
             // Write the updated song back to storage
             self.songs.write(song_id, song);
         }
+
         // TODO: Implement function to get the preview hash of a song
-    // fn get_preview(...) -> felt252 { ... }
+        fn get_preview(self: @ContractState, song_id: u64) -> felt252 {
+            // Validate song ID
+            let total_songs = self.song_count.read();
+            assert!(song_id < total_songs, "Song ID does not exist");
+
+            // Return preview IPFS hash
+            let song = self.songs.read(song_id);
+            song.preview_ipfs_hash
+        }
 
         // TODO: Implement function to buy a song and transfer ownership
-    // fn buy_song(...) -> felt252 { ... }
+        fn buy_song(ref self: ContractState, song_id: u64) -> felt252 {
+            let buyer = get_caller_address();
 
+            // Validate song ID
+            let total_songs = self.song_count.read();
+            assert!(song_id < total_songs, "Song ID does not exist");
+
+            let mut song = self.songs.read(song_id);
+            assert!(song.for_sale, "Song is not for sale");
+            assert!(song.owner != buyer, "You can't buy your own song");
+
+            // Update song mapping
+            let old_owner = song.owner;
+            self.user_songs.write((old_owner, song_id), false);
+
+            // Add to buyer's collection
+            let buyer_song_count = self.user_song_count.read(buyer);
+            self.user_songs.write((buyer, song_id), true);
+            self.user_song_ids.write((buyer, buyer_song_count), song_id);
+            self.user_song_count.write(buyer, buyer_song_count + 1);
+
+            // Transfer ownership
+            song.owner = buyer;
+            song.for_sale = false;
+            self.songs.write(song_id, song);
+
+            song.ipfs_hash
+        }
         // TODO: Implement function to fetch songs owned by a specific user
     // fn get_user_songs(...) -> Array<u64> { ... }
 
