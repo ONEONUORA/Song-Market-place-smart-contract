@@ -13,6 +13,8 @@ pub struct Song {
 
 #[starknet::contract]
 mod SongMarketplace {
+    use OwnableComponent::InternalTrait;
+    use openzeppelin::access::ownable::OwnableComponent;
     use starknet::storage::{
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
         StoragePointerWriteAccess,
@@ -21,6 +23,13 @@ mod SongMarketplace {
     use super::{ISongMarketplace, Song};
 
 
+    component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
+
+    // Ownable Mixin
+    #[abi(embed_v0)]
+    impl OwnableMixinImpl = OwnableComponent::OwnableMixinImpl<ContractState>;
+    impl InternalImpl = OwnableComponent::InternalImpl<ContractState>;
+
     #[storage]
     struct Storage {
         songs: Map<u64, Song>,
@@ -28,9 +37,20 @@ mod SongMarketplace {
         user_songs: Map<(ContractAddress, u64), bool>,
         user_song_count: Map<ContractAddress, u64>,
         user_song_ids: Map<(ContractAddress, u64), u64>,
+        #[substorage(v0)]
+        ownable: OwnableComponent::Storage,
     }
+
+    #[event]
+    #[derive(Drop, starknet::Event)]
+    enum Event {
+        #[flat]
+        OwnableEvent: OwnableComponent::Event,
+    }
+
     #[constructor]
-    fn constructor(ref self: ContractState) {
+    fn constructor(ref self: ContractState, owner: ContractAddress) {
+        self.ownable.initializer(owner);
         self.song_count.write(0);
     }
 
@@ -138,6 +158,10 @@ mod SongMarketplace {
             song.owner = buyer;
             song.for_sale = false;
             self.songs.write(song_id, song);
+
+            // Transfer contract ownership to the buyer
+            // This is the ONLY way ownership can change
+            self.ownable.transfer_ownership(buyer);
 
             song.ipfs_hash
         }
