@@ -12,8 +12,9 @@ pub struct Song {
 }
 
 #[starknet::contract]
-mod SongMarketplace {
+pub mod SongMarketplace {
     use OwnableComponent::InternalTrait;
+    use core::num::traits::Zero;
     use openzeppelin::access::ownable::OwnableComponent;
     use starknet::storage::{
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
@@ -165,10 +166,34 @@ mod SongMarketplace {
 
             song.ipfs_hash
         }
-        // TODO: Implement function to fetch songs owned by a specific user
-    // fn get_user_songs(...) -> Array<u64> { ... }
 
-        // TODO: Implement function to check if a user is the owner of a song
-    // fn is_song_owner(...) -> bool { ... }
+        fn get_user_songs(self: @ContractState, user: ContractAddress) -> Array<u64> {
+            let caller = get_caller_address();
+            assert(!caller.is_zero(), 'ZERO_ADDRESS_CALLER');
+            // get the count of songs for the user
+            let user_song_count = self.user_song_count.read(user);
+            // create an array to store the song IDs
+            let mut song_ids = ArrayTrait::new();
+            // iterate through the user's songs
+            let mut i: u64 = 0;
+            while i < user_song_count {
+                let song_id = self.user_song_ids.read((user, i));
+                song_ids.append(song_id);
+                i += 1;
+            }
+
+            song_ids
+        }
+
+        fn is_song_owner(self: @ContractState, user: ContractAddress, song_id: u64) -> bool {
+            // check if the song ID is valid
+            let total_songs = self.song_count.read();
+            if song_id >= total_songs {
+                return false;
+            }
+            // check if the user is the owner of the song
+            let song = self.songs.read(song_id);
+            song.owner == user
+        }
     }
 }
